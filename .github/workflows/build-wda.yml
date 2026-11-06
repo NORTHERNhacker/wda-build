@@ -20,7 +20,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-15
     steps:
       - name: Clone WebDriverAgent v4.10.24
         run: git clone --depth 1 --branch v4.10.24 https://github.com/appium/WebDriverAgent.git
