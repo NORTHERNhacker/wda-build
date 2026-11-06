@@ -1,29 +1,27 @@
-# Build unsigned WebDriverAgent IPA for physical iOS devices.
-#
-# Produces an *iphoneos* (device) arm64 build with no code signing — intended
-# for jailbroken devices with AppSync Unified (signature checks disabled).
-#
-# Usage:
-#   1. Create a NEW public repository on GitHub (e.g. "wda-build")
-#   2. Add this file as .github/workflows/build-wda.yml (via web "Add file")
-#   3. Actions tab → "Build WDA IPA" → Run workflow
-#   4. Wait ~10 minutes, download artifact "WDA-unsigned-ipa"
-#   5. Copy the downloaded WDA-unsigned.ipa to the Linux machine
-#
-# Pinned to appium/WebDriverAgent v4.10.24 (Aug 2022, Xcode 13 era) —
-# the last generation built for the iOS 14 SDK, matching our iPhone X @ 14.3.
-# Newer WDA tags may pull in iOS 15+ runtime requirements.
-
 name: Build WDA IPA
 on:
   workflow_dispatch:
+    inputs:
+      wda_tag:
+        description: 'WebDriverAgent git tag to build'
+        required: true
+        default: 'v4.10.24'
 
 jobs:
   build:
     runs-on: macos-15
     steps:
-      - name: Clone WebDriverAgent v4.10.24
-        run: git clone --depth 1 --branch v4.10.24 https://github.com/appium/WebDriverAgent.git
+      - name: Pick Xcode with max iOS-14 runtime compat
+        run: |
+          ls -d /Applications/Xcode*.app || true
+          XC=$(ls -d /Applications/Xcode_15*.app 2>/dev/null | sort -V | head -1)
+          if [ -z "$XC" ]; then XC=$(ls -d /Applications/Xcode*.app | sort -V | head -1); fi
+          echo "Using $XC"
+          echo "DEVELOPER_DIR=$XC/Contents/Developer" >> "$GITHUB_ENV"
+          "$XC/Contents/Developer/usr/bin/xcodebuild" -version
+
+      - name: Clone WebDriverAgent
+        run: git clone --depth 1 --branch ${{ github.event.inputs.wda_tag }} https://github.com/appium/WebDriverAgent.git
 
       - name: Build for iOS device (signing disabled)
         run: |
@@ -39,14 +37,13 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             OTHER_CFLAGS="-Wno-error -Wno-missing-noescape"
 
-      - name: Package unsigned IPA
+      - name: Package unsigned IPA (proper Payload layout)
         run: |
           APP_PATH=$(find ./DerivedData -name "WebDriverAgentRunner-Runner.app" -type d | head -1)
-          echo "App bundle: $APP_PATH"
           test -n "$APP_PATH"
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
-          cd Payload && zip -q -r ../WDA-unsigned.ipa . && cd ..
+          zip -q -r WDA-unsigned.ipa Payload
           ls -la WDA-unsigned.ipa
 
       - name: Upload artifact
