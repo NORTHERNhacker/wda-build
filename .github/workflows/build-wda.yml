@@ -1,0 +1,55 @@
+# Build unsigned WebDriverAgent IPA for physical iOS devices.
+#
+# Produces an *iphoneos* (device) arm64 build with no code signing — intended
+# for jailbroken devices with AppSync Unified (signature checks disabled).
+#
+# Usage:
+#   1. Create a NEW public repository on GitHub (e.g. "wda-build")
+#   2. Add this file as .github/workflows/build-wda.yml (via web "Add file")
+#   3. Actions tab → "Build WDA IPA" → Run workflow
+#   4. Wait ~10 minutes, download artifact "WDA-unsigned-ipa"
+#   5. Copy the downloaded WDA-unsigned.ipa to the Linux machine
+#
+# Pinned to appium/WebDriverAgent v4.10.24 (Aug 2022, Xcode 13 era) —
+# the last generation built for the iOS 14 SDK, matching our iPhone X @ 14.3.
+# Newer WDA tags may pull in iOS 15+ runtime requirements.
+
+name: Build WDA IPA
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-13
+    steps:
+      - name: Clone WebDriverAgent v4.10.24
+        run: git clone --depth 1 --branch v4.10.24 https://github.com/appium/WebDriverAgent.git
+
+      - name: Build for iOS device (signing disabled)
+        run: |
+          cd WebDriverAgent
+          xcodebuild build-for-testing \
+            -project WebDriverAgent.xcodeproj \
+            -scheme WebDriverAgentRunner \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath ../DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH=$(find ./DerivedData -name "WebDriverAgentRunner-Runner.app" -type d | head -1)
+          echo "App bundle: $APP_PATH"
+          test -n "$APP_PATH"
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          cd Payload && zip -q -r ../WDA-unsigned.ipa . && cd ..
+          ls -la WDA-unsigned.ipa
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WDA-unsigned-ipa
+          path: WDA-unsigned.ipa
